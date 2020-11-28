@@ -1,20 +1,25 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: waldur-mastermind-job
+  name: waldur-mastermind-initdb-job
   labels:
 {{ include "waldur.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": post-install, post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
 spec:
   template:
     metadata:
-      annotations:
-        "helm.sh/hook": post-install, post-upgrade
-        "helm.sh/hook-weight": "0"
-        "helm.sh/hook-delete-policy": hook-succeeded, hook-failed
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/version: {{ .Chart.AppVersion }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
       initContainers:
       - name: check-db-ready
-        image: postgres:9.6.5
+        image: postgres:{{ template "waldur.postgresql.version" . }}
         command: ['sh', '-c',
           'until pg_isready -h $POSTGRESQL_HOST -p $POSTGRESQL_PORT; 
           do echo waiting for database; sleep 2; done;']
@@ -24,7 +29,7 @@ spec:
           - name: POSTGRESQL_PORT
             value: {{ template "waldur.postgresql.port" . }}
       containers:
-        - name: waldur-mastermind-job
+        - name: waldur-mastermind-migrate
           image: opennode/waldur-mastermind:{{ .Values.waldur.imageTag }}
           args:
             - initdb
@@ -39,59 +44,78 @@ spec:
           - name: POSTGRESQL_PORT
             value: {{ template "waldur.postgresql.port" . }}
           - name: POSTGRESQL_USER
-            value: {{ default "waldur" .Values.postgresql.postgresqlUsername | quote }}
+            value: {{ template "waldur.postgresql.user" . }}
           - name: POSTGRESQL_PASSWORD
             valueFrom:
               secretKeyRef:
-              {{- if .Values.postgresql.existingSecret }}
-                name: {{ .Values.postgresql.existingSecret }}
-              {{- else }}
                 name: {{ template "waldur.postgresql.secret" . }}
-              {{- end }}
-                key: {{ template "waldur.postgresql.secretKey" . }}
+                key: {{ template "waldur.postgresql.secret.passwordKey" . }}
           - name: POSTGRESQL_NAME
-            value: {{ default "waldur" .Values.postgresql.postgresqlDatabase | quote }}
-          - name: REDIS_HOST
-            value: {{ template "waldur.redis.host" . }}
-          - name: REDIS_PORT
-            value: {{ template "waldur.redis.port" . }}
-          - name: REDIS_PASSWORD
-            valueFrom:
-              secretKeyRef:
-              {{- if .Values.redis.existingSecret }}
-                name: {{ .Values.redis.existingSecret }}
-              {{- else }}
-                name: {{ template "waldur.redis.secret" . }}
-              {{- end }}
-                key: {{ template "waldur.redis.secretKey" . }}
+            value: {{ template "waldur.postgresql.dbname" . }}
+          - name: LOGGING_LOG_FILE
+            value: "/var/log/waldur/core.log"
+          - name: EVENTS_LOG_FILE
+            value: "/var/log/waldur/events.log"
+          {{ if .Values.waldur.sentryDSN }}
+          - name: SENTRY_DSN
+            value: {{ .Values.waldur.sentryDSN | quote }}
+          {{ end }}
           volumeMounts:
-            - name: api-core
-              mountPath: /etc/waldur/core.ini
-              subPath: core.ini
             - name: api-override
               mountPath: /etc/waldur/override.conf.py
               subPath: override.conf.py
             - name: api-celery
               mountPath: /etc/waldur/celery.conf
               subPath: celery.conf
-            - name: api-uwsgi
-              mountPath: /etc/waldur/uwsgi.ini
-              subPath: uwsgi.ini
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+        - name: waldur-mastermind-create-dbcache
+          image: opennode/waldur-mastermind:{{ .Values.waldur.imageTag }}
+          args:
+            - initdb-cache
+          env:
+          - name: GLOBAL_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: waldur-secret
+                key: GLOBAL_SECRET_KEY
+          - name: POSTGRESQL_HOST
+            value: {{ template "waldur.postgresql.host" . }}
+          - name: POSTGRESQL_PORT
+            value: {{ template "waldur.postgresql.port" . }}
+          - name: POSTGRESQL_USER
+            value: {{ template "waldur.postgresql.user" . }}
+          - name: POSTGRESQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ template "waldur.postgresql.secret" . }}
+                key: {{ template "waldur.postgresql.secret.passwordKey" . }}
+          - name: POSTGRESQL_NAME
+            value: {{ template "waldur.postgresql.dbname" . }}
+          - name: LOGGING_LOG_FILE
+            value: "/var/log/waldur/core.log"
+          - name: EVENTS_LOG_FILE
+            value: "/var/log/waldur/events.log"
+          {{ if .Values.waldur.sentryDSN }}
+          - name: SENTRY_DSN
+            value: {{ .Values.waldur.sentryDSN | quote }}
+          {{ end }}
+          volumeMounts:
+            - name: api-override
+              mountPath: /etc/waldur/override.conf.py
+              subPath: override.conf.py
+            - name: api-celery
+              mountPath: /etc/waldur/celery.conf
+              subPath: celery.conf
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
-      - name: api-core
-        configMap:
-          name: api-core-config
       - name: api-override
         configMap:
           name: api-override-config
       - name: api-celery
         configMap:
           name: api-celery-config
-      - name: api-uwsgi
-        configMap:
-          name: api-uwsgi-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

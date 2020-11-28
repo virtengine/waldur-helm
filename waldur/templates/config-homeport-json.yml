@@ -5,29 +5,155 @@ metadata:
 data:
   config.json: |
     {
+      {{ if .Values.waldur.defaultLanguage }}
+      "defaultLanguage": {{ .Values.waldur.defaultLanguage | quote }},
+      {{ end }}
+      
+      {{ if .Values.waldur.languageChoices }}
+      "languageChoices": [
+      {{ if has "et" .Values.waldur.languageChoices }}
+          { "code": "et", "label": "Estonian" },
+      {{ end }}
+      {{ if has "lv" .Values.waldur.languageChoices }}
+          { "code": "lv", "label": "Latvian" },
+      {{ end }}
+      {{ if has "ru" .Values.waldur.languageChoices }}
+          { "code": "ru", "label": "Russian" },
+      {{ end }}
+      {{ if has "it" .Values.waldur.languageChoices }}
+          { "code": "it", "label": "Italian" },
+      {{ end }}
+      {{ if has "de" .Values.waldur.languageChoices }}
+          { "code": "de", "label": "German" },
+      {{ end }}
+      {{ if has "es" .Values.waldur.languageChoices }}
+          { "code": "es", "label": "Spanish" },
+      {{ end }}
+      {{ if has "ita" .Values.waldur.languageChoices }}
+          { "code": "ita", "display_code": "en", "label": "English" }
+      {{ else if has "neic" .Values.waldur.languageChoices }}
+          { "code": "neic", "display_code": "en", "label": "English" }
+      {{ else if has "par" .Values.waldur.languageChoices }}
+          { "code": "par", "display_code": "en", "label": "English" }
+      {{ else }}
+          { "code": "en", "label": "English" }
+      {{ end }}
+      ],
+      {{ end }}
+
+      {{ if has "billing" .Values.waldur.features }}
+      "accountingMode": "billing",
+      {{ else }}
+      "hideOrganizationBillingStep": true,
+      {{ end }}
+
+      {{ if has "secure_session" .Values.waldur.features }}
+      "authStorage": "sessionStorage",
+      {{ end }}
+
+      "enabledFeatures": [
+        "billing",
+        "customers",
+        "eventlog",
+        "import",
+        "notifications",
+        "private_clouds",
+        "projects",
+        "projectCostDetails",
+        "resources",
+        "storage",
+        "support.users",
+        "support.organizations",
+        "support.resources-treemap",
+        "support.shared-providers",
+        "team",
+        "vms",
+      {{ if has "slurm" .Values.waldur.features }}
+        "slurm",
+      {{ end }}
+      {{ if not (has "disabled_offering_comments" .Values.waldur.features) }}
+        "offering.comments",
+      {{ end }}
+      {{ if not (has "disable_private_marketplace_offerings"  .Values.waldur.features) }}
+        "marketplace.my-offerings",
+      {{ end }}
+      {{ if has "compliancy" .Values.waldur.features }}
+        "marketplace.checklist",
+      {{ end }}
+      {{ if not (has "oracle" .Values.waldur.features) }}
+        "offering.list",
+      {{ else }}
+        "oracle",
+      {{ end }}
+      {{ if not (has "disable_volume_types" .Values.waldur.features) }}
+        "openstack.volume-types",
+      {{ end }}
+      {{ if not (has "disable_user_ssh_keys" .Values.waldur.features) }}
+        "user.ssh-keys",
+      {{ end }}
+      {{ if has "freeipa" .Values.waldur.features }}
+        "freeipa",
+      {{ end }}
+      {{ if has "support" .Values.waldur.features }}
+        "support",
+      {{ end }}
+        "marketplace",
+      {{ if has "marketplace.tos" .Values.waldur.features }}
+        "marketplace.termsOfService",
+      {{ end }}
+      {{ if has "offering" .Values.waldur.features }}
+        "offering",
+      {{ end }}
+      {{ if has "enable_project_member_role" .Values.waldur.features }}
+        "project.support",
+      {{ end }}
+        "_needed_until_trailing_comma_is_supported_in_json_dict"
+      ],
+
+      {{ if .Values.waldur.currencyName }}
+      "currency": {{ .Values.waldur.currencyName | quote }},
+      {{ end }}
+
+      {{ if .Values.waldur.homeport.googleAnalyticsID }}
+      "GoogleAnalyticsID": {{ .Values.waldur.homeport.googleAnalyticsID | quote }},
+      {{ end }}
+
+      {{ if .Values.waldur.sentryDSN }}
+      "SENTRY_DSN": {{ .Values.waldur.sentryDSN | quote }},
+      {{ end }}
+
+      {{ if .Values.waldur.homeport.userMandatoryFields }}
+      "userMandatoryFields": {{ .Values.waldur.homeport.userMandatoryFields | toJson }},
+      {{ end }}
+      
+      {{ if .Values.waldur.homeport.userRegistrationHiddenFields }}
+      "userRegistrationHiddenFields": {{ .Values.waldur.homeport.userRegistrationHiddenFields | toJson }},
+      {{ end }}
+
+      {{ if .Values.waldur.whitelabeling.modePageTitle }}
+      "modePageTitle": {{ .Values.waldur.whitelabeling.modePageTitle | quote }},
+      {{ end }}
+
       {{ if .Values.waldur.whitelabeling.shortPageTitle }}
       "shortPageTitle": {{ .Values.waldur.whitelabeling.shortPageTitle | quote }},
       {{ end }}
 
       {{ if .Values.waldur.whitelabeling.loginLogoUrl }}
       "loginLogo": {{ .Values.waldur.whitelabeling.loginLogoUrl | quote }},
-      {{ else if .Values.waldur.whitelabeling.loginLogoBlobPath }}
-        {{ $file :=  .Values.waldur.whitelabeling.loginLogoBlobPath }}
-        "loginLogo": {{ .Files.Get $file | quote }},
+      {{ else if .Values.waldur.whitelabeling.loginLogoPath }}
+      "loginLogo": "images/login_logo.png",
       {{ end }}
 
       {{ if .Values.waldur.whitelabeling.sidebarLogoUrl }}
       "sidebarLogo": {{ .Values.waldur.whitelabeling.sidebarLogoUrl | quote }},
-      {{ else if .Values.waldur.whitelabeling.sidebarLogoBlobPath }}
-        {{ $file :=  .Values.waldur.whitelabeling.sidebarLogoBlobPath }}
-        "sidebarLogo": {{ .Files.Get $file | quote }},
+      {{ else if .Values.waldur.whitelabeling.sidebarLogoPath }}
+      "sidebarLogo": "images/sidebar_logo.png",
       {{ end }}
 
       {{ if .Values.waldur.whitelabeling.poweredByLogoUrl }}
       "poweredByLogo": {{ .Values.waldur.whitelabeling.poweredByLogoUrl | quote}},
-      {{ else if .Values.waldur.whitelabeling.poweredByLogoBlobPath }}
-        {{ $file :=  .Values.waldur.whitelabeling.poweredByLogoBlobPath }}
-        "poweredByLogo": {{ .Files.Get $file | quote }},
+      {{ else if .Values.waldur.whitelabeling.poweredByLogoPath }}
+      "poweredByLogo": "images/poweredby_logo.png",
       {{ end }}
 
       "apiEndpoint": {{ .Values.waldur.apiUrl | quote}}

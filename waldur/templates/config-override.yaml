@@ -25,17 +25,15 @@ data:
         },
     }
 
-    if os.environ.get('REDIS_PASSWORD'):
-        redis_url = 'redis://:%s@%s:%s' % (os.environ.get('REDIS_PASSWORD'),
-                                           os.environ.get('REDIS_HOST'),
-                                           os.environ.get('REDIS_PORT'))
-    else:
-        redis_url = 'redis://%s:%s' % (os.environ.get('REDIS_HOST'), os.environ.get('REDIS_PORT'))
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+            'LOCATION': 'waldur_cache',
+        }
+    }
 
-    CACHES['default']['LOCATION'] = redis_url
-    CELERY_BROKER_URL = redis_url
-    CELERY_RESULT_BACKEND = redis_url
-    DEFENDER_REDIS_URL = "%s/0" % redis_url
+    CELERY_BROKER_URL = {{ include "waldur.rabbitmq.rmqUrl" . | quote }}
+    CELERY_RESULT_BACKEND = {{ include "waldur.rabbitmq.rmqUrl" . | quote }}
 
     EMAIL_HOST = '{{ .Values.waldur.emailHost }}'
 
@@ -82,6 +80,17 @@ data:
         'TARA_SECRET': '{{ .Values.waldur.tara.secret }}',
         'TARA_CLIENT_ID': '{{ .Values.waldur.tara.clientId }}',
         'TARA_SANDBOX': False,
+    })
+    {{ end }}
+
+    {{ if has "EDUTEAMS" .Values.waldur.authMethods }}
+    WALDUR_AUTH_SOCIAL.update({
+        'EDUTEAMS_LABEL': '{{ .Values.waldur.eduteams.label }}',
+        'EDUTEAMS_CLIENT_ID': '{{ .Values.waldur.eduteams.clientId }}',
+        'EDUTEAMS_SECRET': '{{ .Values.waldur.eduteams.secret }}',
+        'EDUTEAMS_AUTH_URL': '{{ .Values.waldur.eduteams.authUrl }}',
+        'EDUTEAMS_TOKEN_URL': '{{ .Values.waldur.eduteams.tokenUrl }}',
+        'EDUTEAMS_USERINFO_URL': '{{ .Values.waldur.eduteams.userinfoUrl }}',
     })
     {{ end }}
 
@@ -375,12 +384,12 @@ data:
     })
     WALDUR_SUPPORT['ISSUE'].update({
         'caller_field': 'Request participants',
-    {{ if .Values.waldur.support.servicedesk.organizationField }}
-        'organisation_field': '{{ .Values.waldur.support.servicedesk.organizationField }}',
+    {{ if .Values.waldur.support.organizationField }}
+        'organisation_field': '{{ .Values.waldur.support.organizationField }}',
     {{ end }}
     })
     WALDUR_SUPPORT['PROJECT'].update({
-        'key': '{{ .Values.waldur.support.servicedesk.projectKey }}',
+        'key': '{{ .Values.waldur.support.projectKey }}',
     })
 
     ISSUE_LINK_TEMPLATE = '{{ .Values.waldur.support.homeportIssueUrl }}'
@@ -451,4 +460,16 @@ data:
             'currency_name': 'EUR',
         }
     })
+    {{ end }}
+
+    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+
+    AWS_ACCESS_KEY_ID = '{{ .Values.minio.accessKey }}'
+    AWS_SECRET_ACCESS_KEY = '{{ .Values.minio.secretKey }}'
+    AWS_STORAGE_BUCKET_NAME = '{{ .Values.minio.bucketName }}'
+    AWS_S3_ENDPOINT_URL = '{{ .Values.minio.endpoint }}'
+    CONVERT_MEDIA_URLS_TO_MASTERMIND_NETLOC = True
+
+    {{ if .Values.waldur.defaultFromEmail }}
+    DEFAULT_FROM_EMAIL = '{{ .Values.waldur.defaultFromEmail }}'
     {{ end }}

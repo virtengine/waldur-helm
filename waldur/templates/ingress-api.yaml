@@ -1,10 +1,10 @@
-apiVersion: extensions/v1beta1
+apiVersion: networking.k8s.io/v1beta1
 kind: Ingress
 metadata:
   name: api-ingress
   annotations:
     nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     {{ if .Values.ingress.tls.source | eq "letsEncrypt" }}
     cert-manager.io/cluster-issuer: letsencrypt-prod-issuer
     {{ end }}
@@ -13,7 +13,19 @@ spec:
   - host: {{ .Values.apiHostname }}
     http:
       paths:
-      - path: /
+      - path: /api
+        backend:
+          serviceName: waldur-mastermind-api
+          servicePort: 8080
+      - path: /docs
+        backend:
+          serviceName: waldur-mastermind-api
+          servicePort: 8080
+      - path: /admin
+        backend:
+          serviceName: waldur-mastermind-api
+          servicePort: 8080
+      - path: /static
         backend:
           serviceName: waldur-mastermind-api
           servicePort: 8080

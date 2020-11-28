@@ -17,6 +17,7 @@ spec:
       containers:
         - name: waldur-homeport
           image: opennode/waldur-homeport:{{ .Values.waldur.imageTag }}
+          imagePullPolicy: {{ .Values.waldur.pullPolicy }}
           ports:
             - name: http
               containerPort: 80
@@ -28,8 +29,10 @@ spec:
             - name: nginx
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
-            - name: vars
-              mountPath: /var/www/waldur
+            - name: icons
+              mountPath: /var/www/waldur/icons
+            - name: files
+              mountPath: /var/www/waldur/files
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
       volumes:
@@ -39,9 +42,12 @@ spec:
       - name: nginx
         configMap:
           name: homeport-nginx-config
-      - name: vars
+      - name: icons
+        secret:
+          secretName: homeport-icons-secret
+      - name: files
         configMap:
-          name: homeport-vars-config
+          name: homeport-files-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

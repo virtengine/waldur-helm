@@ -12,8 +12,8 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
-apiHostname: api.example.com
-homeportHostname: web.example.com
+apiHostname: waldur.local
+homeportHostname: waldur.local
 
 affinity: {}
 
@@ -28,6 +28,23 @@ resources: {}
   # requests:
   #   cpu: 100m
   #   memory: 128Mi
+
+hpa:
+  api:
+    enabled: false
+    resources:
+      requests:
+        cpu: 500m
+    cpuUtilizationBorder: 70
+  celery:
+    enabled: false
+    workerResources:
+      requests:
+        cpu: 2000m
+    beatResources:
+      requests:
+        cpu: 300m
+    cpuUtilizationBorder: 80
 
 nodeSelector: {}
 
@@ -44,21 +61,38 @@ ingress:
     source: "letsEncrypt" # Possible values: `letsEncrypt` and `secret`
     secretsDir: "tls"  # Enabled only if source == `secret`
 
+logManagement:
+  enabled: true
+  elasticHost: "elasticsearch-master.elastic.svc.cluster.local" ## See docs/service-endpoint.md for details.
+  elasticPort: "9200"
+  elasticProtocol: "http"
+
 waldur:
   imageTag: latest
-  apiUrl: "http://api.example.com/"
+  pullPolicy: Always
+  apiUrl: "https://waldur.local/" ## NB: this string must match `https://<hostname>/` pattern (or similar with `http` protocol)
   homeportUrl: ""
   emailHost: ""
   notificationSubject: ""
   timeZone: "UTC"
   features: []
   currencyName: "EUR"
+  defaultFromEmail: ""
   site:
     name: "Waldur"
     logo: ""
     address: ""
     email: ""
     phone: ""
+  defaultLanguage: "en"
+  languageChoices: 
+    - en
+    - et
+    - de
+    - es
+    - ru
+    - lv
+    - it
   authMethods: 
     - LOCAL_SIGNIN
   facebook:
@@ -73,6 +107,13 @@ waldur:
   tara:
     secret: ""
     clientId: ""
+  eduteams:
+    label: "Eduteams"
+    clientId: ""
+    secret: ""
+    authUrl: "https://proxy.acc.eduteams.org/saml2sp/OIDC/authorization"
+    tokenUrl: "https://proxy.acc.eduteams.org/OIDC/token"
+    userinfoUrl: "https://proxy.acc.eduteams.org/OIDC/userinfo"
   ldap:
     host: ""
     baseDN: ""
@@ -142,76 +183,85 @@ waldur:
     shortPageTitle: ""
     modePageTitle: ""
     loginLogoUrl: ""
-    loginLogoBlobPath: ""
+    loginLogoPath: ""
     sidebarLogoUrl: ""
-    sidebarLogoBlobPath: ""
+    sidebarLogoPath: ""
     poweredByLogoUrl: ""
-    poweredByLogoBlobPath: ""
+    poweredByLogoPath: ""
     faviconPath: ""
-    faviconBlobPath: ""
-    manifestJsonPath: ""
     logo96Path: ""
-    logo96BlobPath: ""
     logo144Path: ""
-    logo144BlobPath: ""
     logo192Path: ""
-    logo192BlobPath: ""
+    manifestJsonPath: ""
     tosHtmlPath: ""
     privacyHtmlPath: ""
   mastermindTemplating:
     mastermindTemplatesPath: "mastermind_templates"
+  saml2:
+    enabled: false
+    dir: "waldur_saml2"
+  homeport:
+    googleAnalyticsID: ""
+    userMandatoryFields: {}
+    userRegistrationHiddenFields: {}
+
+bootstrap:
+  enabled: false
+  script: "bootstrap.sh"
+  dir: "bootstrap"
 
 postgresql:
   enabled: true
-  nameOverride: waldur-postgresql
   postgresqlDatabase: waldur
   postgresqlUsername: waldur
-  # The following variables are only used when internal PG is disabled
-  # postgresqlHost: postgres
   postgresqlPassword: waldur
-  # postgresqlPort: 5432
-  # When defined the `postgresqlPassword` field is ignored
-  # existingSecret: secret-name
-  # existingSecretKey: postgresql-password
+  persistence:
+    size: 10Gi
+  image:
+    tag: 12
+  exisitingSecret: ""
 
-redis:
-  enabled: true
-  cluster:
-    enabled: false
-  nameOverride: waldur-redis
-  # The following variables are only used when internal PG is disabled
-  # host: redis
-  # Just omit the password field if your redis cluster doesn't use password
-  # password: redis
-  # port: 6379
-  # When defined the `password` field is ignored
-  # existingSecret: secret-name
-  # existingSecretKey: redis-password
-  master:
-    persistence:
-      enabled: true
-      # If change pvc size redis.master.persistence.size: 20Gi
+postgresql-ha:
+  enabled: false
+  postgresql:
+    database: waldur
+    username: waldur
+    password: waldur
+    exisitingSecret: ""
+    replicaCount: 3
+    syncReplication: false
+    repmgrUsername: repmgr
+    repmgrPassword: waldur
+  persistence:
+    size: 10Gi
+  pgpoolImage:
+    tag: 4
+  postgresqlImage:
+    tag: 12
 
-##
-## Storage configuration for waldur
-persistence:
-  ##
-  ## enable persistance storage
-  enabled: true
-  ##
-  ## Existing claim to use
-  # existingClaim: nil
-  ## Existing claim's subPath to use, e.g. "waldur" (optional)
-  # subPath: ""
-  ##
-  ## Persistent Volume Storage Class
-  ## If defined, storageClassName: <storageClass>
-  ## If set to "-", storageClassName: "", which disables dynamic provisioning
-  ## If undefined (the default) or set to null, no storageClassName spec is
-  ##   set, choosing the default provisioner.  (gp2 on AWS, standard on
-  ##   GKE, AWS & OpenStack)
-  # storageClass: default
-  accessMode: ReadWriteOnce
-  ##
-  ## Persistant storage size request
-  size: 1Gi
+postgresBackup:
+  enabled: false
+  schedule: "0 5 * * *"
+  rotationSchedule: "0 6 * * 6"
+  retentionDays: 365
+  minNumber: 10
+  image: opennode/postgres-minio:0.1.0
+
+minio:
+  accessKey: ""
+  secretKey: ""
+  bucketName: data
+  ## min.io service endpoint used for communication inside a cluster
+  endpoint: "http://minio.default.svc.cluster.local:9000" ## See docs/service-endpoint.md for details.
+
+rabbitmq:
+  user: "waldur"
+  password: "waldur"
+  ## hostname of rabbitmq service
+  host: "rmq-rabbitmq.default.svc.cluster.local" ## See docs/service-endpoint.md for details.
+  customManagementPort:
+  customAMQPPort:
+
+stressTesting:
+  enabled: false
+  locustFilePath: "locust_task/locust_test.py"

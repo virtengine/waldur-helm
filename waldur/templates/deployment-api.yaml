@@ -21,6 +21,7 @@ spec:
       containers:
         - name: waldur-mastermind-api
           image: opennode/waldur-mastermind:{{ .Values.waldur.imageTag }}
+          imagePullPolicy: {{ .Values.waldur.pullPolicy }}
           args:
             - "mastermind"
           ports:
@@ -38,51 +39,35 @@ spec:
           - name: POSTGRESQL_PORT
             value: {{ template "waldur.postgresql.port" . }}
           - name: POSTGRESQL_USER
-            value: {{ default "waldur" .Values.postgresql.postgresqlUsername | quote }}
+            value: {{ template "waldur.postgresql.user" . }}
           - name: POSTGRESQL_PASSWORD
             valueFrom:
               secretKeyRef:
-              {{- if .Values.postgresql.existingSecret }}
-                name: {{ .Values.postgresql.existingSecret }}
-              {{- else }}
                 name: {{ template "waldur.postgresql.secret" . }}
-              {{- end }}
-                key: {{ template "waldur.postgresql.secretKey" . }}
+                key: {{ template "waldur.postgresql.secret.passwordKey" . }}
           - name: POSTGRESQL_NAME
-            value: {{ default "waldur" .Values.postgresql.postgresqlDatabase | quote }}
-          - name: REDIS_HOST
-            value: {{ template "waldur.redis.host" . }}
-          - name: REDIS_PORT
-            value: {{ template "waldur.redis.port" . }}
-          - name: REDIS_PASSWORD
-            valueFrom:
-              secretKeyRef:
-              {{- if .Values.redis.existingSecret }}
-                name: {{ .Values.redis.existingSecret }}
-              {{- else }}
-                name: {{ template "waldur.redis.secret" . }}
-              {{- end }}
-                key: {{ template "waldur.redis.secretKey" . }}
+            value: {{ template "waldur.postgresql.dbname" . }}
+          - name: LOGGING_LOG_FILE
+            value: "/var/log/waldur/core.log"
+          - name: EVENTS_LOG_FILE
+            value: "/var/log/waldur/events.log"
+          {{ if .Values.waldur.sentryDSN }}
+          - name: SENTRY_DSN
+            value: {{ .Values.waldur.sentryDSN | quote }}
+          {{ end }}
           resources:
+            {{ if .Values.hpa.api.enabled }}
+            {{- toYaml .Values.hpa.api.resources | nindent 12 }}
+            {{ else }}
             {{- toYaml .Values.resources | nindent 12 }}
+            {{ end }}
           volumeMounts:
-          {{- if .Values.persistence.enabled }}
-            - name: media
-              mountPath: /var/lib/waldur/
-              subPath: {{ .Values.persistence.subPath | default "" }}
-          {{- end }}
-            - name: api-core
-              mountPath: /etc/waldur/core.ini
-              subPath: core.ini
             - name: api-override
               mountPath: /etc/waldur/override.conf.py
               subPath: override.conf.py
             - name: api-celery
               mountPath: /etc/waldur/celery.conf
               subPath: celery.conf
-            - name: api-uwsgi
-              mountPath: /etc/waldur/uwsgi.ini
-              subPath: uwsgi.ini
             {{ $templatesPath := .Values.waldur.mastermindTemplating.mastermindTemplatesPath }}
             {{ $templatesRoot := $templatesPath | printf "%s/"}}
             {{ $templatesPathPattern := $templatesPath | printf "%s/**" }}
@@ -91,27 +76,63 @@ spec:
               mountPath: {{ $path | replace $templatesRoot "" | printf "/usr/src/waldur/src/%s" }}
               subPath: {{ $path | base }}
             {{ end }}
+            {{ if .Values.waldur.saml2.enabled }}
+            - name: waldur-saml2
+              mountPath: /etc/waldur/saml2
+            - name: waldur-saml2-attr-maps
+              mountPath: /etc/waldur/saml2/attribute-maps
+            - name: waldur-saml2-cron
+              mountPath: /etc/cron.hourly
+            {{ end }}
+        {{ if .Values.logManagement.enabled }}
+            - name: waldur-log
+              mountPath: /var/log/waldur
+        - name: fluentd
+          image: fluent/fluentd-kubernetes-daemonset:v1.11.0-debian-elasticsearch7-1.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name:  FLUENT_ELASTICSEARCH_HOST
+              value: {{ .Values.logManagement.elasticHost | quote }}
+            - name:  FLUENT_ELASTICSEARCH_PORT
+              value: {{ .Values.logManagement.elasticPort | quote }}
+            - name: FLUENT_ELASTICSEARCH_SCHEME
+              value: {{ .Values.logManagement.elasticProtocol | quote }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: waldur-log
+              mountPath: /var/log/waldur
+            - name: fluentd-conf
+              mountPath: /fluentd/etc
+        {{ end }}
       volumes:
-      {{- if .Values.persistence.enabled }}
-      - name: media
-        persistentVolumeClaim:
-          claimName: {{ .Values.persistence.existingClaim | default (include "waldur.fullname" .) }}
-      {{- end }}
-      - name: api-core
-        configMap:
-          name: api-core-config
       - name: api-override
         configMap:
           name: api-override-config
       - name: api-celery
         configMap:
           name: api-celery-config
-      - name: api-uwsgi
-        configMap:
-          name: api-uwsgi-config
       - name: waldur-mastermind-template
         configMap:
           name: mastermind-template-config
+      {{ if .Values.logManagement.enabled }}
+      - name: waldur-log
+        emptyDir: {}
+      - name: fluentd-conf
+        configMap:
+          name: fluentd-config
+      {{ end }}
+      {{ if .Values.waldur.saml2.enabled }}
+      - name: waldur-saml2
+        secret:
+          secretName: waldur-saml2-secret
+      - name: waldur-saml2-attr-maps
+        configMap:
+          name: waldur-saml2-attr-maps-config
+      - name: waldur-saml2-cron
+        configMap:
+          name: waldur-saml2-cron-config
+      {{ end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
